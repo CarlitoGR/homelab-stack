@@ -1,0 +1,4 @@
+---
+# Required: compose_stack_name, compose_stack_dir (a folder containing compose.yaml)
+compose_stack_build: false
+compose_stack_restart_services: []

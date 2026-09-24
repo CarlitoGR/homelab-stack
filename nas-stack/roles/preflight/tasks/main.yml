@@ -1,0 +1,82 @@
+---
+- name: Validate configuration before touching the NAS
+  ansible.builtin.assert:
+    that:
+      - base_domain is search('\.')
+      - edge_https_port | int > 0
+      - nas_apps | map(attribute='subdomain') | unique | length == nas_apps | length
+      - nas_apps | map(attribute='subdomain') | select('equalto', 'auth') | length == 0
+      - nas_apps | map(attribute='policy') | difference(['one_factor', 'two_factor', 'deny']) | length == 0
+    fail_msg: >-
+      Check group_vars: base_domain needs a dot (e.g. home.lan), subdomains must be unique and not 'auth'
+      (reserved for the sign-in portal), and policy must be one_factor, two_factor, or deny.
+    quiet: true
+
+- name: Validate secrets (values are never printed)
+  ansible.builtin.assert:
+    that:
+      - item | length >= 64
+      - item is not search('CHANGE_ME')
+    fail_msg: Every Authelia secret must be at least 64 characters. Generate with `openssl rand -hex 64`.
+    quiet: true
+  loop:
+    - "{{ vault_authelia_jwt_secret }}"
+    - "{{ vault_authelia_session_secret }}"
+    - "{{ vault_authelia_storage_encryption_key }}"
+  no_log: true
+
+- name: Validate local users
+  ansible.builtin.assert:
+    that:
+      - authelia_users | length > 0
+      - authelia_users | map(attribute='password_hash') | reject('match', '^\$argon2id\$') | list | length == 0
+      - authelia_users | map(attribute='password_hash') | select('search', 'CHANGE_ME') | list | length == 0
+    fail_msg: Define at least one user with an argon2id password hash (see vault.yml.example).
+    quiet: true
+  when: not authelia_ldap_enabled | bool
+  no_log: true
+
+- name: Validate LDAP settings
+  ansible.builtin.assert:
+    that:
+      - authelia_ldap.address is match('ldaps?://')
+      - vault_authelia_ldap_password | default('') | length > 0
+    fail_msg: With authelia_ldap_enabled, set authelia_ldap.address (ldaps://...) and vault_authelia_ldap_password.
+    quiet: true
+  when: authelia_ldap_enabled | bool
+  no_log: true
+
+- name: Confirm the timesheet source exists on this machine
+  ansible.builtin.stat:
+    path: "{{ timesheet_src_dir }}/Dockerfile"
+  delegate_to: localhost
+  become: false
+  register: preflight_timesheet_src
+
+- name: Fail if the timesheet source is missing
+  ansible.builtin.assert:
+    that: preflight_timesheet_src.stat.exists
+    fail_msg: "No Dockerfile under {{ timesheet_src_dir }}. Set timesheet_src_dir in group_vars."
+    quiet: true
+
+- name: Check that Container Manager is installed
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ nas_docker_bin }}"
+    - "{{ nas_compose_bin }}"
+  register: preflight_bins
+
+- name: Fail if Docker or Compose is missing
+  ansible.builtin.assert:
+    that: preflight_bins.results | map(attribute='stat.exists') | min
+    fail_msg: >-
+      Docker or docker-compose not found at {{ nas_docker_bin }} / {{ nas_compose_bin }}.
+      Install Container Manager from Package Center, or correct the paths in group_vars.
+    quiet: true
+
+- name: Create the Docker root folder
+  ansible.builtin.file:
+    path: "{{ nas_docker_root }}"
+    state: directory
+    mode: "0755"

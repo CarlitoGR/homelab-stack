@@ -1,0 +1,71 @@
+# {{ ansible_managed }}
+# Secrets are not in this file: they are injected from /secrets via *_FILE environment variables.
+---
+theme: auto
+{% if authelia_ldap_enabled | bool and authelia_ldap.ca_cert_src | length > 0 %}
+certificates_directory: /config/certs
+{% endif %}
+
+server:
+  address: tcp://:9091
+
+log:
+  level: info
+
+totp:
+  issuer: {{ base_domain }}
+
+webauthn:
+  display_name: {{ authelia_display_name | to_json }}
+  enable_passkey_login: true
+
+authentication_backend:
+  password_reset:
+    disable: true # no email server configured; reset passwords in the vault and redeploy
+{% if authelia_ldap_enabled | bool %}
+  ldap:
+    implementation: freeipa
+    address: {{ authelia_ldap.address | to_json }}
+    base_dn: {{ authelia_ldap.base_dn | to_json }}
+    user: {{ authelia_ldap.bind_user | to_json }}
+{% else %}
+  file:
+    path: /config/users_database.yml
+    password:
+      algorithm: argon2
+{% endif %}
+
+access_control:
+  default_policy: deny
+  rules:
+{% for app in nas_apps %}
+    - domain: {{ (app.subdomain ~ '.' ~ base_domain) | to_json }}
+      policy: {{ app.policy }}
+{% if app.groups | default([]) | length > 0 %}
+      subject:
+{% for group in app.groups %}
+        - {{ ('group:' ~ group) | to_json }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+session:
+  cookies:
+    - domain: {{ base_domain }}
+      authelia_url: https://auth.{{ base_domain }}{{ edge_port_suffix }}
+      default_redirection_url: https://{{ nas_apps[0].subdomain }}.{{ base_domain }}{{ edge_port_suffix }}
+
+regulation:
+  max_retries: 5
+  find_time: 2 minutes
+  ban_time: 15 minutes
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+notifier:
+  # No email server: one-time codes for registering passkeys/2FA are written here. Read with:
+  #   sudo cat {{ edge_dir }}/authelia/config/notification.txt
+  filesystem:
+    filename: /config/notification.txt
