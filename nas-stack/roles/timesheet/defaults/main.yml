@@ -1,8 +1,0 @@
----
-timesheet_dir: "{{ nas_docker_root }}/timesheet"
-# Controller-side paths never sent to the NAS (caches, VCS, tests, build output).
-timesheet_source_exclude_parts:
-  - '(^|/)(__pycache__|\.git|\.venv|\.pytest_cache|\.ruff_cache|\.mypy_cache)(/|$)'
-  - '(^|/)(dist|build|tests)(/|$)'
-  - '\.egg-info|\.pyc$|\.zip$'
-timesheet_source_exclude: "{{ timesheet_source_exclude_parts | join('|') }}"
