@@ -1,0 +1,49 @@
+---
+# ---- Connection: Synology DSM 7.2+ ----------------------------------------------------------------------------------
+ansible_python_interpreter: /usr/bin/python3
+ansible_become: true
+ansible_become_method: ansible.builtin.sudo
+ansible_become_password: "{{ vault_become_password }}"
+
+# ---- NAS layout -----------------------------------------------------------------------------------------------------
+nas_docker_root: /volume1/docker # put this shared folder on the NVMe pool if you have one
+nas_docker_bin: /usr/local/bin/docker # Container Manager installs here; sudo's PATH does not include it
+nas_compose_bin: /usr/local/bin/docker-compose
+nas_timezone: America/New_York
+nas_edge_network: nas_edge # internal network: only Caddy/Authelia/apps, no direct access from the LAN
+
+# ---- Hostnames ------------------------------------------------------------------------------------------------------
+# Every <subdomain>.<base_domain> must resolve to the NAS IP (router DNS, AdGuard Home, or each device's hosts file).
+base_domain: home.lan
+# DSM's own web server holds 80/443 on the NAS, so Caddy publishes on this port instead.
+edge_https_port: 8443
+
+# ---- Apps behind the edge -------------------------------------------------------------------------------------------
+# Single source of truth: Caddy sites and Authelia access rules are generated from this list.
+#   policy: one_factor | two_factor | deny        groups: optional Authelia/LDAP groups allowed in
+nas_apps:
+  - name: timesheet
+    subdomain: timesheet
+    upstream: timesheet:8000
+    policy: two_factor
+  - name: uptime_kuma
+    subdomain: status
+    upstream: uptime-kuma:3001
+    policy: two_factor
+    groups: [admins]
+
+# ---- Authentication -------------------------------------------------------------------------------------------------
+authelia_display_name: Home NAS
+authelia_users: "{{ vault_authelia_users }}" # ignored when LDAP is enabled
+
+# Optional: log in with FreeIPA accounts instead of the local users file.
+authelia_ldap_enabled: false
+authelia_ldap:
+  address: ldaps://ipa.example.com:636
+  base_dn: dc=example,dc=com
+  bind_user: uid=authelia,cn=sysaccounts,cn=etc,dc=example,dc=com
+  ca_cert_src: "" # controller path to the IPA CA cert (e.g. /etc/ipa/ca.crt); required for a private CA
+
+# ---- Timesheet ------------------------------------------------------------------------------------------------------
+timesheet_src_dir: "{{ playbook_dir }}/../timesheet-calc"
+timesheet_allowed_users: [] # optional app-level allowlist on top of Authelia's rules

@@ -1,0 +1,13 @@
+---
+- name: Deploy the NAS container stack
+  hosts: nas
+  gather_facts: false
+  roles:
+    - role: preflight
+      tags: [always]
+    - role: edge
+      tags: [edge]
+    - role: timesheet
+      tags: [timesheet]
+    - role: uptime_kuma
+      tags: [uptime_kuma]

@@ -1,0 +1,19 @@
+---
+- name: Create Uptime Kuma data folder
+  ansible.builtin.file:
+    path: "{{ uptime_kuma_dir }}/data"
+    state: directory
+    mode: "0700"
+
+- name: Render Uptime Kuma compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ uptime_kuma_dir }}/compose.yaml"
+    mode: "0644"
+
+- name: Start or update Uptime Kuma
+  ansible.builtin.include_role:
+    name: compose_stack
+  vars:
+    compose_stack_name: uptime-kuma
+    compose_stack_dir: "{{ uptime_kuma_dir }}"

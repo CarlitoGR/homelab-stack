@@ -1,0 +1,37 @@
+# {{ ansible_managed }}
+# Listens on 443 inside the container; the NAS publishes it on {{ edge_https_port }}.
+# tls internal: Caddy runs its own CA. Install artifacts/nas-root-ca.crt on your devices to trust it.
+{
+	auto_https disable_redirects
+}
+
+(protected) {
+	# `route` keeps this exact order. Caddy's default directive order runs forward_auth BEFORE request_header,
+	# which would let request_header delete the identity Authelia just set.
+	route {
+		# 1. Drop identity headers from the client: only Authelia may set them.
+		request_header -Remote-User
+		request_header -Remote-Groups
+		request_header -Remote-Email
+		request_header -Remote-Name
+		# 2. Ask Authelia. Signed out -> redirect to the sign-in portal. Signed in -> copy identity headers.
+		forward_auth authelia:9091 {
+			uri /api/authz/forward-auth
+			copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+		}
+		# 3. Hand the verified request to the app.
+		reverse_proxy {args[0]}
+	}
+}
+
+auth.{{ base_domain }} {
+	tls internal
+	reverse_proxy authelia:9091
+}
+{% for app in nas_apps %}
+
+{{ app.subdomain }}.{{ base_domain }} {
+	tls internal
+	import protected {{ app.upstream }}
+}
+{% endfor %}

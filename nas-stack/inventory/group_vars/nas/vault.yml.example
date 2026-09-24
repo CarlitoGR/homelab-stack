@@ -1,0 +1,21 @@
+---
+# Copy to vault.yml, fill in, then encrypt:  ansible-vault encrypt inventory/group_vars/nas/vault.yml
+#
+# Secrets:           openssl rand -hex 64
+# Password hash:     docker run --rm -it authelia/authelia:4.39 authelia crypto hash generate argon2
+#                    (run on any Docker host, including the NAS over SSH; paste the "Digest" value)
+
+vault_become_password: CHANGE_ME # the DSM admin account's password (for sudo)
+
+vault_authelia_jwt_secret: CHANGE_ME
+vault_authelia_session_secret: CHANGE_ME
+vault_authelia_storage_encryption_key: CHANGE_ME # never change after first deploy: it encrypts stored 2FA devices
+
+vault_authelia_users:
+  - username: admin
+    displayname: Admin
+    email: admin@example.com
+    password_hash: "$argon2id$v=19$m=65536,t=3,p=4$CHANGE_ME"
+    groups: [admins]
+
+vault_authelia_ldap_password: "" # only when authelia_ldap_enabled: true
